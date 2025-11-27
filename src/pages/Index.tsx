@@ -11,22 +11,23 @@ import { cn } from "@/lib/utils";
 type GamePhase = "arrangement" | "gameplay" | "victory";
 type PlayerNumber = 1 | 2;
 
-const createDeck = (playerId: string): Card[] => {
+const createDeck = (playerId: string, playerColor: "green" | "red"): Card[] => {
   const cards: Card[] = [];
-  const colors: ("green" | "red")[] = ["green", "red"];
   
+  // Each player gets 12 cards of their color (numbers 1-6, two of each)
   for (let num = 1; num <= 6; num++) {
-    for (const color of colors) {
+    for (let i = 0; i < 2; i++) {
       cards.push({
-        id: `${playerId}-${num}-${color}`,
+        id: `${playerId}-${num}-${playerColor}-${i}`,
         number: num,
-        color,
+        color: playerColor,
         isKnockedOut: false,
       });
     }
   }
   return cards;
 };
+
 
 const Index = () => {
   const [gamePhase, setGamePhase] = useState<GamePhase>("arrangement");
@@ -58,19 +59,19 @@ const Index = () => {
   }, []);
 
   const resetGame = () => {
-    setGamePhase("arrangement");
-    setCurrentArrangingPlayer(1);
-    setCurrentTurnPlayer(1);
-    setPlayer1Stacks(Array(6).fill(null).map(() => [null, null]));
-    setPlayer2Stacks(Array(6).fill(null).map(() => [null, null]));
-    setUnplacedCards(createDeck("p1"));
-    setPlayer1CheatTokens(3);
-    setPlayer2CheatTokens(3);
-    setWinner(null);
-    setLastRoll(null);
-    setIsRolling(false);
-    setShowingCheatSelector(false);
-  };
+  setGamePhase("arrangement");
+  setCurrentArrangingPlayer(1);
+  setCurrentTurnPlayer(1);
+  setPlayer1Stacks(Array(6).fill(null).map(() => [null, null]));
+  setPlayer2Stacks(Array(6).fill(null).map(() => [null, null]));
+  setUnplacedCards(createDeck("p1", "green")); // Player 1 gets green
+  setPlayer1CheatTokens(3);
+  setPlayer2CheatTokens(3);
+  setWinner(null);
+  setLastRoll(null);
+  setIsRolling(false);
+  setShowingCheatSelector(false);
+};
 
   const handleDragStart = (card: Card) => {
     setDraggedCard(card);
@@ -113,13 +114,14 @@ const Index = () => {
   };
 
   const handleLockArrangement = () => {
-    if (currentArrangingPlayer === 1) {
-      setCurrentArrangingPlayer(2);
-      setUnplacedCards(createDeck("p2"));
-    } else {
-      setGamePhase("gameplay");
-    }
-  };
+  if (currentArrangingPlayer === 1) {
+    setCurrentArrangingPlayer(2);
+    setUnplacedCards(createDeck("p2", "red")); // Player 2 gets red
+  } else {
+    setGamePhase("gameplay");
+  }
+};
+
 
   const handleDiceRoll = (number: number, color: "green" | "red") => {
     setIsRolling(true);
@@ -146,40 +148,42 @@ const Index = () => {
   };
 
   const processKnockout = (number: number, color: "green" | "red") => {
-    const opponentStacks = currentTurnPlayer === 1 ? player2Stacks : player1Stacks;
-    const setOpponentStacks = currentTurnPlayer === 1 ? setPlayer2Stacks : setPlayer1Stacks;
+  const opponentStacks = currentTurnPlayer === 1 ? player2Stacks : player1Stacks;
+  const setOpponentStacks = currentTurnPlayer === 1 ? setPlayer2Stacks : setPlayer1Stacks;
 
-    let knockedOut = false;
+  let knockedOut = false;
 
-    const newStacks = opponentStacks.map(stack => {
-      const [bottom, top] = stack;
-      
-      // Check if top card matches
-      if (top && !top.isKnockedOut && top.number === number && top.color === color) {
-        knockedOut = true;
-        return [bottom, { ...top, isKnockedOut: true }];
-      }
-      
-      // If top is knocked out, check bottom (now visible)
-      if (top?.isKnockedOut && bottom && !bottom.isKnockedOut && bottom.number === number && bottom.color === color) {
-        knockedOut = true;
-        return [{ ...bottom, isKnockedOut: true }, top];
-      }
-      
-      return stack;
-    });
+  const newStacks = opponentStacks.map(stack => {
+    const [bottom, top] = stack;
+    
+    // Check if top card exists and matches
+    if (top && !top.isKnockedOut && top.number === number && top.color === color) {
+      knockedOut = true;
+      // Remove top card, bottom card becomes visible (moves to top position)
+      return [null, bottom]; // Bottom card is now the visible top card
+    }
+    
+    // If only bottom card exists (top was already knocked out), check it
+    if (!top && bottom && !bottom.isKnockedOut && bottom.number === number && bottom.color === color) {
+      knockedOut = true;
+      return [null, { ...bottom, isKnockedOut: true }];
+    }
+    
+    return stack;
+  });
 
-    setOpponentStacks(newStacks);
+  setOpponentStacks(newStacks);
 
-    // Check win condition
-    setTimeout(() => {
-      checkWinCondition(newStacks);
-      if (!knockedOut || winner) return;
-      
-      // Switch turn
-      setCurrentTurnPlayer(prev => prev === 1 ? 2 : 1);
-    }, knockedOut ? 800 : 100);
-  };
+  // Check win condition
+  setTimeout(() => {
+    checkWinCondition(newStacks);
+    if (winner) return;
+    
+    // Switch turn only if no knockout or after processing
+    setCurrentTurnPlayer(prev => prev === 1 ? 2 : 1);
+  }, knockedOut ? 800 : 100);
+};
+
 
   const checkWinCondition = (stacks: (Card | null)[][]) => {
     const allKnockedOut = stacks.every(stack => 
